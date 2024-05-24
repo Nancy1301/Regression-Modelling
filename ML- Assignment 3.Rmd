@@ -1,0 +1,595 @@
+---
+title: "Machine Learning Assignment 2"
+output: html_notebook
+---
+
+
+# Problem1—Predicting Income using Logistic Regression and Decision Trees For this problem, you will be using the Adult dataset from here(https://archive.ics.uci.edu/ml/datasets/adult ) and the goal is to use a logistic regression and a decision tree model to predict the binary variable income (>50K or <=50K) based on the other attributes in the dataset. Read the attribute information from here then click on the datafolder and download “adult.data”
+
+# . (0.5 pt) Load adult.data into a dataframe in R. Note that adult.data does not have column names in the first line so you need to set header=FALSE when you read the data then manually set the column names. Inspect the dataset using “str” and “summary” functions. What is the type of each variable in the dataset numeric/continuous or categorical/discrete? For each categorical variable explain whether it is nominal or ordinal.
+
+```{r}
+# Let's read the data from the data set
+adult = read.table("/Users/nancy/Downloads/adultData/adult.data", header = FALSE, sep = ',', na.strings = " ?")
+adult
+```
+```{r}
+# Setting the column names manually
+colnames(adult) <- c("age", "workclass", "fnlwgt", "education", "education_num", "marital_status", "occupation", "relationship", "race", "sex", "capital_gain", "capital_loss", "hours_per_week", "native_country","income")
+adult
+```
+
+```{r}
+# Let's inspect the dataset
+summary(adult)
+cat("\n")
+str(adult)
+```
+# What is the type of each variable in the dataset numeric/continuous or categorical/discrete? For each categorical variable explain whether it is nominal or ordinal
+
+The numerical variables as we can see from the summary and str functions are:
+1. age - numeric
+2. fnlwt which is final weight - continuous
+3. Education-num - numeric
+4. Capital-gain - continuous
+5. capital-loss - continuous
+6. hours-per-week - numeric
+
+The categorical variables are:
+1. workclass
+2. marital-status
+3. occupation
+4. relationship
+5. race
+6. sex - binary type
+7. native-country
+
+The variable which is the target variable (y) is:
+1. income - binary categorical variables
+
+According to the categorical variables, all are considered nominal as none of them have any order among them
+
+
+# 2. (0.5 pt) There are some missing values in this dataset represented as “ ?” (Note: there is a space before?) . Make sure that all “ ?” are converted to NAs. You can do so by setting “na.strings” parameters in“read.csv” to “ ?”
+
+This has been done above
+```{r}
+adult
+```
+
+# 3. (1pt) Set the random seed, and split the data to train/test. Use 80% of samples for training and the remaining 20% for testing. You can use “sample” (similar to what we did in slide 37 of week 6 lecture but you need to adjust1000 and 900 to the number of observations in your dataset and the size of the sample) or alternatively, you can use “createDataPartition” method from caret package
+
+This has been done later before modelling
+
+# 4. (3pt) Read the section on “Handling Missing Data” in chapter 13 of the textbook Machine Learning with R. Find which columns/variables in the train and test set have missing values. Then decide about how you want to impute the missing values in these columns. Explain why you chose this imputation approach.
+
+```{r}
+# Finding missing values
+colSums(is.na(adult))
+```
+# Let's check how to impute these missing values in columns: workclass, occupation and income
+
+
+```{r}
+# workclass: Workclass is a categorical variable. One approach is to impute missing values with the mode (most frequent category) of the variable. Alternatively, we can create a new category for missing values (e.g., "Unknown" or "Other") if there is no clear dominant category.
+# education, education-num, marital-status, occupation, relationship, race, sex, native-country: These are categorical variables. For categorical variables, we can impute missing values with the mode (most frequent category) of the variable or create a new category for missing values
+
+table(adult$workclass)
+table(adult$occupation)
+table(adult$`native-country`)
+
+```
+
+
+We can use the "private" value for workclass variable as it contains the maximum value.
+We can use the "Craft-repair" value for occupation variable as it contains the maximum value.
+We can use the "United-States" value for native-country variable as it contains the maximum value.
+
+```{r}
+#install.packages("tidyverse")
+library(tidyverse)
+```
+
+
+```{r}
+adult <- adult %>%
+  mutate(workclass = if_else(is.na(workclass), "private", workclass))
+colSums(is.na(adult))
+```
+
+```{r}
+adult <- adult %>%
+  mutate(occupation = if_else(is.na(occupation), "private", occupation))
+colSums(is.na(adult))
+
+```
+
+
+```{r}
+adult <- adult %>%
+  mutate(native_country = if_else(is.na(native_country), "United-States", native_country))
+colSums(is.na(adult))
+```
+
+
+# 5. (3pt) The variable native-country is sparse, meaning it has too many levels, where somelevels occur infrequently. Most machine learning algorithms do not work well with spares data. One-hot-encoding or dummy coding of these variables will increase feature dimensions significantly and typically some preprocessing is required to reduce the number of levels. One approach is to group together the levels which occur infrequently. For instance, one could combine together countries with less than 0.1% occurrence in the data to an “other” category. Another possibility is to use domain knowledge; for instance, combine countries based on their geographic location ( “Middle East”, “East-Europe”, “West-Europe”, etc. In a subsequent assignment we will use “feature hashing” which is yet another way to deal with sparse data but for now, please read the section on Making use of sparse data (remapping sparse categorical data) in chapter 13 of the textbook Machine learning with R. Then combine some of the infrequent levels of the native-country. You can decide whether you want to combine the levels based on frequency or domain knowledge. Either one is fine for this assignment but preference will be with a choice that would increase the cross validation performance of the ML models you will train subsequently
+
+```{r}
+# Identify infrequent levels
+country_counts <- prop.table(table(adult$native_country))
+infrequent_countries <- names(country_counts[country_counts < 0.1])
+
+# Combine infrequent levels into "Other" category
+adult$native_country <- ifelse(adult$native_country %in% infrequent_countries, "Other", adult$native_country)
+```
+
+
+
+# 6. (3pt) Use appropriate plots and statistic tests to find which variables in the dataset are associated with “income”. Remove the variable(s) that are not associated with income.
+
+The numerical variables are:
+1. age - numeric
+2. fnlwt which is final weight - continuous
+3. Education-num - numeric
+4. Capital-gain - continuous
+5. capital-loss - continuous
+6. hours-per-week - numeric
+
+The categorical variables are:
+1. workclass
+2. marital-status
+3. occupation
+4. relationship
+5. race
+6. sex - binary type
+7. native-country
+```{r}
+adult
+```
+
+```{r}
+
+# Using Chi-Square Test as both are categorical variables 
+categorical_vars <- c("workclass", "marital_status", "occupation","relationship", "race", "sex", "native_country")
+
+for (var in categorical_vars) {
+  # Perform chi-squared test
+  adult_chisq <- chisq.test(table(adult[[var]], adult$income))
+  mosaicplot(table(adult[[var]], adult$income), main = "Mosaic Plot", color = c("lightblue", "pink"),ylab(var))
+  print(adult_chisq)
+}
+```
+According to my research through Google Resources, This warning usually occurs when we're dealing with small sample sizes. The alternative is to use a Fisher's Exact Test, but we'll continue using the Chi-Square Test.
+
+All the p-values are less than 0.01, therefore, we can conclude that they are all extremely associated.
+
+```{r}
+# Using t-test for numerical 
+adult_t_test <- t.test(age ~ income, data = adult)
+print(adult_t_test)
+adult_t_test <- t.test(fnlwgt ~ income, data = adult)
+print(adult_t_test)
+adult_t_test <- t.test(`hours_per_week` ~ income, data = adult)
+print(adult_t_test)
+adult_t_test <- t.test(`education_num` ~ income, data = adult)
+print(adult_t_test)
+adult_t_test <- t.test(`capital_gain` ~ income, data = adult)
+print(adult_t_test)
+adult_t_test <- t.test(`capital_loss` ~ income, data = adult)
+print(adult_t_test)
+adult_t_test <- t.test(`hours_per_week` ~ income, data = adult)
+print(adult_t_test)
+
+```
+We'll remove this feature - fnlwgt as the p-value is greater than the threshhold value ie. 0.05
+
+
+```{r}
+adult <- adult[, !names(adult) %in% c("fnlwgt")]
+adult
+```
+
+
+Let's create some boxplots
+```{r}
+# Create a boxplot of the 'age' variable grouped by 'income' categories
+boxplot(age ~ income, data = adult, xlab = "Income", ylab = "Age")
+boxplot(education_num ~ income, data = adult, xlab = "Income", ylab = "education-num")
+boxplot(capital_gain ~ income, data = adult, xlab = "Income", ylab = "capital-gain")
+boxplot(capital_loss ~ income, data = adult, xlab = "Income", ylab = "capital-loss")
+boxplot(hours_per_week ~ income, data = adult, xlab = "Income", ylab = "hours-per-week")
+
+```
+```{r}
+# Splitting the data into train and test sets
+train_indices <- sample(1:nrow(adult), 0.8 * nrow(adult))  # 80% for training
+
+# Split the data into training and testing sets
+train_adult_set <- adult[train_indices, ]
+test_adult_set <- adult[-train_indices, ]
+```
+
+# 7. (2pt) Train a logistic regression model on the train data (preprocessed and transformed using above steps) using the glm package and use it to predict “income” for the test data. Note: As explained in the lectures, “predict” method will return predicted probabilities. To convert them to labels, you need to use some threshold ( typically set as 50%) and if the predicted probability is greater than 50% you predict income>50K; otherwise predict income<=50K ( please review the example in lecture 7.2).
+
+The categorical variables are:
+1. workclass
+2. marital-status
+3. occupation
+4. relationship
+5. race
+6. sex - binary type
+7. native-country
+
+```{r}
+
+library(data.table)
+library(mltools)
+# Factorize categorical variables for train data
+train_adult_set$workclass <- as.factor(train_adult_set$workclass)
+train_adult_set$marital_status <- as.factor(train_adult_set$marital_status)
+train_adult_set$occupation <- as.factor(train_adult_set$occupation)
+train_adult_set$relationship <- as.factor(train_adult_set$relationship)
+train_adult_set$race <- as.factor(train_adult_set$race)
+train_adult_set$sex <- as.factor(train_adult_set$sex)
+train_adult_set$native_country <- as.factor(train_adult_set$native_country)
+
+# Factorize categorical variables for test data
+test_adult_set$workclass <- as.factor(test_adult_set$workclass)
+test_adult_set$marital_status <- as.factor(test_adult_set$marital_status)
+test_adult_set$occupation <- as.factor(test_adult_set$occupation)
+test_adult_set$relationship <- as.factor(test_adult_set$relationship)
+test_adult_set$race <- as.factor(test_adult_set$race)
+test_adult_set$sex <- as.factor(test_adult_set$sex)
+test_adult_set$native_country <- as.factor(test_adult_set$native_country)
+
+# Perform one-hot encoding for train data
+train_adult_set <- one_hot(as.data.table(train_adult_set), cols = "auto", sparsifyNAs = FALSE, naCols = FALSE, dropCols = TRUE, dropUnusedLevels = TRUE)
+
+# Perform one-hot encoding for test data
+test_adult_set <- one_hot(as.data.table(test_adult_set), cols = "auto", sparsifyNAs = FALSE, naCols = FALSE, dropCols = TRUE, dropUnusedLevels = TRUE)
+
+# Convert data table back to data frames
+train_adult_set <- as.data.frame(train_adult_set)
+test_adult_set <- as.data.frame(test_adult_set)
+```
+
+
+```{r}
+suppressWarnings({
+train_adult_set$income <- ifelse(train_adult_set$income == " >50K", 1, 0)
+test_adult_set$income <- ifelse(test_adult_set$income == " >50K", 1, 0)
+
+# Train logistic regression model
+logistic_model <- glm(income ~ ., data = train_adult_set, family = binomial)
+})
+```
+
+```{r}
+# Predict probabilities on test data
+predicted_probabilities <- predict(logistic_model, newdata = test_adult_set, type = "response")
+
+# Convert probabilities to labels using 50% threshold
+predicted_labels <- ifelse(predicted_probabilities > 0.5, " >50K", " <=50K")
+head(predicted_probabilities)
+```
+
+```{r}
+table(predicted_labels)
+```
+#. 8. (3 pt)Get the cross table between the predicted labels and true labels in the test data and compute the total error as well as the precision and recall for both income<=50K and income>50K classes.
+
+
+
+```{r}
+# Get true labels from the test data
+#true_labels <- ifelse(test_adult_set$income == 1, " >50K", " <=50K")
+
+# Create confusion matrix between true labels and predicted labels
+confusion_matrix <- table(test_adult_set$income, predicted_labels)
+
+# Compute total error
+total_error <- mean(test_adult_set$income != predicted_labels)
+
+# Compute precision and recall for each class
+precision <- diag(confusion_matrix) / rowSums(confusion_matrix)
+recall <- diag(confusion_matrix) / colSums(confusion_matrix)
+
+# Print confusion matrix, total error, precision, and recall
+
+print(confusion_matrix)
+cat("\n")
+print(precision)
+cat("\n")
+print(recall)
+```
+
+
+
+
+# 9. (3pt) The target variable “income” is imbalanced; the number of adults who make <=50 is three times more than the number of adults who make >50K. Most classification models trained on imbalanced data are biased towards predicting the majority class ( income<=50K in this case) and yield a higher classification error on the minority class (income >50K). One way to deal with class imbalance problem is to down-sample the majority class; meaning randomly sample the observations in the majority class to make it the same size as the minority class. The downside of this approach is that for smaller datasets, removing data will result in significant loss of information and lower performance. In Module 12, we will learn about other techniques to deal with data imbalance without removing information, but for this assignment, we use down- sampling in an attempt to address data imbalance. Note: Down-sampling should only be done on the training data and the test data should have the original imbalance distribution. You can downsample as follows: • Divide your training data into two sets, adults who make <=50K and the ones who make >50K. • Suppose that the >50K set has m elements. Take a sample of size m from the <=50K set. o You can use “sample” from the base package to sample the rows or alternatively, you can use the method “sample_n” from dplyr package to directly sample the dataframe• Combine the above sample with the >50K set. You can use “rbind” function to combine the rows in two or more dataframes. This will give you a balanced training data with the same observations in >50K and <=50K classes. • Re-train the logistic regression model on the balanced training data and evaluate it on the test data. Compare the total error, precision, and recall for the <=50K class and >=50K classes with the previous model. Which model does better at predicting each class.
+
+
+```{r}
+# Assuming you have already loaded your data into a dataframe called 'data'
+
+# Load necessary libraries
+library(dplyr)
+
+# Divide data into two sets: <=50K and >50K
+data_below_50k <- train_adult_set[train_adult_set$income == 0, ]
+data_above_50k <- train_adult_set[train_adult_set$income == 1, ]
+
+sampled_data_below_50k <- data_below_50k[sample(nrow(data_below_50k), nrow(data_above_50k)), ]
+
+# Combine the sampled <=50K data with the >50K data
+balanced_data <- rbind(sampled_data_below_50k, data_above_50k)
+
+# Retrain logistic regression model on the balanced training data
+# Assuming 'income' is the response variable and other columns are predictors
+model <- glm(income ~ ., data = balanced_data, family = binomial)
+```
+```{r}
+
+# Make predictions on test data
+predictions <- predict(model, newdata = test_adult_set, type = "response")
+
+# Convert probabilities to binary predictions (0 or 1)
+binary_predictions <- ifelse(predictions > 0.5, " >50K", " <=50K")
+
+# Evaluating the model by finding confusion matrix
+conf_matrix <- table(binary_predictions, test_adult_set$income)
+
+# Calculate total error, precision, and recall for both classes
+total_error <- 1 - sum(diag(conf_matrix)) / sum(conf_matrix)
+precision_below_50k <- conf_matrix[1,1] / sum(conf_matrix[,1])
+precision_above_50k <- conf_matrix[2,2] / sum(conf_matrix[,2])
+recall_below_50k <- conf_matrix[1,1] / sum(conf_matrix[1,])
+recall_above_50k <- conf_matrix[2,2] / sum(conf_matrix[2,])
+
+# Print results
+cat("Total Error:", total_error, "\n")
+cat("Precision for <=50K class:", precision_below_50k, "\n")
+cat("Recall for <=50K class:", recall_below_50k, "\n")
+cat("Precision for >50K class:", precision_above_50k, "\n")
+cat("Recall for >50K class:", recall_above_50k, "\n")
+
+```
+
+# 10. (3pt) Repeat steps 7-9 above but this time, use a C5.0 decision tree model to predict “income” instead of the logistic regression model (use trials=30 for boosting multiple decision trees (see an example in slide 44, module 6) . Compare the logistic regression model with the boosted C5.0 model.
+
+```{r}
+install.packages("C50")
+library(C50)
+
+# Convert income to a factor variable
+train_adult_set$income <- as.factor(train_adult_set$income)
+
+# Train a C5.0 decision tree model
+C50 <- C5.0(income ~ ., data = train_adult_set)
+
+# Predict income for test data using the C5.0 model
+C50_pred_labels <- predict(C50, newdata = test_adult_set)
+
+# Get the confusion matrix for C5.0 model
+confusion_matrix <- table(C50_pred_labels, test_adult_set$income)
+
+# Compute total error, precision, and recall for C5.0 model
+total_error_c50 <- 1 - sum(diag(confusion_matrix)) / sum(confusion_matrix)
+precision_c50_le50K <- confusion_matrix[1, 1] / sum(confusion_matrix[, 1])
+recall_c50_le50K <- confusion_matrix[1, 1] / sum(confusion_matrix[1, ])
+precision_c50_gt50K <- confusion_matrix[2, 2] / sum(confusion_matrix[, 2])
+recall_c50_gt50K <- confusion_matrix[2, 2] / sum(confusion_matrix[2, ])
+
+# Display results for C5.0 model
+cat("The C50 Model Results are:\n")
+```
+```{r}
+print(confusion_matrix)
+print(total_error_c50)
+print(precision_c50_le50K)
+print(recall_c50_le50K)
+print(precision_c50_gt50K)
+print(recall_c50_gt50K)
+```
+
+```{r}
+
+# Divide data into two sets: <=50K and >50K
+data_below_50k <- train_adult_set[train_adult_set$income == 0, ]
+data_above_50k <- train_adult_set[train_adult_set$income == 1, ]
+
+sampled_data_below_50k <- data_below_50k[sample(nrow(data_below_50k), nrow(data_above_50k)), ]
+
+# Combine the sampled <=50K data with the >50K data
+balanced_data <- rbind(sampled_data_below_50k, data_above_50k)
+
+# Convert income to a factor variable
+balanced_data$income <- as.factor(balanced_data$income)
+
+# Train a C5.0 decision tree model
+c50_model <- C5.0(income ~ ., data = balanced_data)
+
+# Predict income for test data using the C5.0 model
+predicted_labels_c50 <- predict(c50_model, newdata = test_adult_set)
+
+# Get the confusion matrix for C5.0 model
+confusion_matrix_c50 <- table(predicted_labels_c50, test_adult_set$income)
+
+# Compute total error, precision, and recall for C5.0 model
+total_error_c50 <- 1 - sum(diag(confusion_matrix_c50)) / sum(confusion_matrix_c50)
+precision_c50_le50K <- confusion_matrix_c50[1, 1] / sum(confusion_matrix_c50[, 1])
+recall_c50_le50K <- confusion_matrix_c50[1, 1] / sum(confusion_matrix_c50[1, ])
+precision_c50_gt50K <- confusion_matrix_c50[2, 2] / sum(confusion_matrix_c50[, 2])
+recall_c50_gt50K <- confusion_matrix_c50[2, 2] / sum(confusion_matrix_c50[2, ])
+
+# Display results for C5.0 model
+cat("C5.0 Model Results:\n")
+```
+
+```{r}
+print(confusion_matrix_c50)
+print(total_error_c50)
+print(precision_c50_le50K)
+print(recall_c50_le50K)
+print(precision_c50_gt50K)
+print(recall_c50_gt50K)
+```
+
+According to the results, the boosted C5.0 decision tree model typically outperforms the logistic regression model in terms of overall error rate and predictive accuracy, both prior to and following the downsampling process.
+
+# Problem2—Predicting Student Performance For this problem we are going to use UCI’s student performance dataset. The dataset is a recording of student grades in math and language and includes attributes related to student demographics and school related features. Click on the above link, then go to “Data Folder” and download and unzip “student.zip”. You will be using student-mat.csv file. The goal is to create a regression model to forecast student final grade in math “G3” based on the other attributes.
+
+11. (0.5pt) Read the dataset into a dataframe. Ensure that you are using a correct delimiter to read the data correctly and set the “sep” option in read.csv accordingly.
+
+```{r}
+student = read.csv("/Users/nancy/Downloads/student+performance/student/student-mat.csv", sep = ";")
+student
+```
+
+12. (2pt) Explore the dataset. More specifically, answer the following questions:
+a. Is there any missing values in the dataset?
+```{r}
+summary(student)
+str(student)
+```
+```{r}
+colSums(is.na(student))
+```
+
+There is no missing values in the dataset.
+
+b. Which variables are associated with the target variable G3? To answer this question, use appropriate plots and test statistics based on variable types. You can do this one by one for all variables or write a loop that applies appropriate statistic tests based on variable types. Either approach is fine.
+
+```{r}
+# Numerical variables: age, freetime, absences, G1, G2, G3
+# Categorical variables:  Medu, Fedu, traveltime, failures, studytime, school, sex, address, famsize, Pstatus, Mjob, Fjob, reason, guardian, schoolsup, famsup, paid, activities, nursery, higher, internet, romantic, famrel, goout, Dalc, Walc, health
+
+# Our target variable is integer 
+student_correlation <- cor(student[, c("age","freetime","absences", "G1", "G2","G3")], use = "pairwise.complete.obs")
+print(student_correlation)
+```
+
+
+```{r}
+# Now, let's check the association of categorical variables with our target integer variables. For this we'll use the ANOVA analysis
+columns_to_subtract <- c("age", "freetime", "absences", "G1", "G2", "G3")
+
+# Create a new dataframe by subtracting selected columns from the main dataframe
+cat_student <- student[, !names(student) %in% columns_to_subtract]
+
+# Perform ANOVA for each variable in 'cat_student' against 'G3'
+for (value in names(cat_student)) {
+  print(value)
+}
+
+# school, sex, address, famsize, Pstatus, Mjob, Fjob, reason, guardian, schoolsup, famsup, paid, activities, nursery, higher, internet, romantic
+```
+
+```{r}
+Medu_anova <- aov(student$Medu ~ student$G3, data = student)
+print(Medu_anova)
+Fedu_anova <- aov(student$Fedu ~ student$G3, data = student)
+print(Fedu_anova)
+traveltime_anova <- aov(student$traveltime ~ student$G3, data = student)
+print(traveltime_anova)
+studytime_anova <- aov(student$studytime ~ student$G3, data = student)
+print(studytime_anova)
+failures_anova <- aov(student$failures ~ student$G3, data = student)
+print(failures_anova)
+famrel_anova <- aov(student$famrel ~ student$G3, data = student)
+print(famrel_anova)
+goout_anova <- aov(student$goout ~ student$G3, data = student)
+print(goout_anova)
+Dalc_anova <- aov(student$Dalc ~ student$G3, data = student)
+print(Dalc_anova)
+Walc_anova <- aov(student$Walc ~ student$G3, data = student)
+print(Walc_anova)
+health_anova <- aov(student$health ~ student$G3, data = student)
+print(health_anova)
+```
+
+
+c. Draw a histogram of the target variable “G3” and interpret it
+
+```{r}
+hist(student$G3, main = "Histogram of G3", xlab = "G3", ylab = "Frequency")
+```
+
+This histogram is a little bell-shaped.
+
+13. (0.5 pt) Split the data into train and test. Use 80% of samples for training and 20% of samples for testing
+
+```{r}
+n <- nrow(student)
+n
+train_indices <- sample(1:n, 0.8 * n)  # 80% for training
+
+# Split the data into training and testing sets
+train_student_set <- student[train_indices, ]
+test_student_set <- student[-train_indices, ]
+```
+
+14. set the random seed: set.seed(123)
+
+```{r}
+set.seed(123)
+```
+
+5. (2 pt) Use caret package to run 10 fold cross validation using linear regression method on the train
+data to predict the “G3” variable . Print the resulting model to see the cross validation RMSE. In
+addition, take a summary of the model and interpret the coefficients. Which coefficients are
+statistically different from zero? What does this mean?
+Set the random seed again. We need to do this before each training to ensure we get the same folds in
+cross validation. Set.seed(123) so we can compare the models using their cross validation RMSE.(2 pts) Use
+caret and leap packages to run a 10 fold cross validation using step wise linear regression method with
+backward selection on the train data. The train method by default uses maximum of 4 predictors and reports
+the best models with 1..4 predictors. We need to change this parameter to consider all predictors. So inside
+your train function, add the following parameter tuneGrid = data.frame(nvmax = 1:n), where n is the
+number of variables you use to predict “G3”. Which model (with how many variables or nvmax ) has the
+lowest cross validation RMSE? Take the summary of the final model, which variables are selected in the
+model with the lowest RMSE
+```{r}
+install.packages("leaps")
+```
+
+
+```{r}
+library(caret)
+library(leaps)
+set.seed(123)
+train_student_set_control <- trainControl(method = "cv", number = 10)
+linear_model <- train(G3 ~ ., data = train_student_set, method = "lm", trControl = train_student_set_control)
+print(linear_model)
+summary(linear_model$finalModel)
+stepwise_model <- train(G3 ~ ., data = train_student_set, method = "leapBackward", tuneGrid = data.frame(nvmax = ncol(train_student_set)-1), trControl=train_student_set_control)
+print(stepwise_model)
+summary(stepwise_model$finalModel)
+```
+
+
+16. (2pt) Which model does better at predicting G3 based on the cross validation RMSE? Get the predictions of
+this model for the test data and report RMSE.
+
+```{r}
+linear_rmse <- linear_model$results$RMSE
+
+# Get cross-validation RMSE for stepwise linear regression model
+stepwise_rmse <- stepwise_model$results$RMSE
+
+print(linear_rmse)
+print(stepwise_rmse)
+```
+
+
+
+According to this data,we'll choose the second type of model because the RMSE is the lowest
+The model is- Linear Regression with Backwards Selection 
+
+
+```{r}
+test_predictions <- predict(stepwise_model, newdata = test_student_set)
+print(test_predictions)
+test_rmse <- RMSE(test_predictions, test_student_set$G3)
+print(test_rmse)
+```
+
